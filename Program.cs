@@ -65,11 +65,9 @@ builder.Services.AddAuthentication(options =>
 })
 .AddGoogle(options =>
 {
-    // Google Cloud Console'dan aldığın ClientId ve ClientSecret bilgileri
     options.ClientId = builder.Configuration["Authentication:Google:ClientId"];
     options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
 
-    // İşlem başarısız olursa yönlendirilecek path
     options.AccessDeniedPath = "/api/auth/access-denied";
 });
 
@@ -86,14 +84,13 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<FluentValidationFilter>();
 });
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
         document.Components ??= new OpenApiComponents();
 
-        // FIX: SecuritySchemes koleksiyonunu da başlatmamız gerekiyor
         document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
 
         var bearerScheme = new OpenApiSecurityScheme
@@ -119,7 +116,6 @@ builder.Services.AddOpenApi(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -128,6 +124,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

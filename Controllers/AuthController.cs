@@ -23,6 +23,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("register")]
         [AllowAnonymous]
+        [EndpointSummary("Yeni bir kullanıcı kaydeder")]
+        [EndpointDescription("Sisteme e-posta veya telefon numarası ile yeni bir kullanıcı kaydı oluşturur. İşlem sonucunda doğrulama (OTP) kodu gönderilir.")]
+        [ProducesResponseType(typeof(RegisterLoginResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Register([FromBody] RegisterLoginDto dto)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unkvown";
@@ -36,6 +40,11 @@ namespace AuthProject.Controllers
 
         [HttpPost("login")]
         [AllowAnonymous]
+        [EndpointSummary("Kullanıcı girişi yapar")]
+        [EndpointDescription("Kullanıcı adı ve şifre ile sisteme giriş yapar. Başarılı girişte HttpOnly Cookie olarak JWT token döner.")]
+        [ProducesResponseType(typeof(RegisterLoginResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Login([FromBody] RegisterLoginDto dto)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unkvown";
@@ -53,6 +62,11 @@ namespace AuthProject.Controllers
 
         [HttpPost("forget-password")]
         [AllowAnonymous]
+        [EndpointSummary("Şifre sıfırlama talebi oluşturur")]
+        [EndpointDescription("Kayıtlı e-posta veya telefon numarasına şifre sıfırlama OTP kodu gönderir. Doğrulama adımı için verify_id döner.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ForgetPassword([FromBody] ForgetPasswordRequestDto dto)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -65,6 +79,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("reset-password")]
         [AllowAnonymous]
+        [EndpointSummary("Şifre sıfırlar")]
+        [EndpointDescription("Şifre sıfırlama OTP kodu ile doğrulama yapılarak kullanıcının şifresi güncellenir.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
             var message = await _authService.ResetPasswordAsync(dto);
@@ -73,6 +91,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("refresh")]
         [AllowAnonymous]
+        [EndpointSummary("Erişim tokenını yeniler")]
+        [EndpointDescription("HttpOnly Cookie içindeki Refresh Token kullanılarak yeni bir Access Token ve Refresh Token üretir.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Refresh()
         {
             var token = Request.Cookies["RefreshToken"];
@@ -86,6 +108,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("logout")]
         [Authorize]
+        [EndpointSummary("Kullanıcı çıkış yapar")]
+        [EndpointDescription("Aktif oturumu sonlandırır ve Authentication ile RefreshToken Cookie'lerini temizler.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Logout()
         {
             var sessionIdClaim = User.Claims.FirstOrDefault(c => c.Type == "sessionId")?.Value;
@@ -101,6 +127,10 @@ namespace AuthProject.Controllers
 
         [HttpGet("sessions")]
         [Authorize]
+        [EndpointSummary("Aktif oturumları listeler")]
+        [EndpointDescription("Giriş yapmış kullanıcının tüm aktif oturumlarını IP adresi, cihaz ve tarih bilgisiyle birlikte döner.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Sessions()
         {
             var userId = Guid.Parse(User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier).Value);
@@ -110,6 +140,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("verify-account")]
         [AllowAnonymous]
+        [EndpointSummary("Kullanıcı hesabını doğrular")]
+        [EndpointDescription("Kayıt sonrası gönderilen 6 haneli OTP kodu ile hesabı aktif hale getirir.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> VerifyAccount([FromBody] VerifyAccountDto dto)
         {
             var message = await _authService.VerifyAccountAsync(dto);
@@ -118,6 +152,10 @@ namespace AuthProject.Controllers
 
         [HttpPost("resend-verification-otp")]
         [AllowAnonymous]
+        [EndpointSummary("Doğrulama OTP kodunu yeniden gönderir")]
+        [EndpointDescription("Süresi dolmuş veya ulaşmamış OTP kodunu e-posta ya da SMS aracılığıyla tekrar gönderir.")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> ResendVerificationOtp([FromBody] ResendOtpDto dto)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -129,12 +167,14 @@ namespace AuthProject.Controllers
 
         [HttpGet("google")]
         [AllowAnonymous]
+        [EndpointSummary("Google ile giriş başlatır")]
+        [EndpointDescription("Kullanıcıyı Google OAuth 2.0 kimlik doğrulama sayfasına yönlendirir.")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
         public IActionResult GoogleLogin()
         {
-            // Kullanıcıyı Google giriş sayfasına yönlendir (NestJS: @UseGuards(GoogleAuthGuard) mantığı)
             var properties = new AuthenticationProperties
             {
-                RedirectUri = Url.Action(nameof(GoogleCallback)) // Google'ın döneceği adres
+                RedirectUri = Url.Action(nameof(GoogleCallback))
             };
 
             return Challenge(properties, GoogleDefaults.AuthenticationScheme);
@@ -142,42 +182,38 @@ namespace AuthProject.Controllers
 
         [HttpGet("google/redirect")]
         [AllowAnonymous]
+        [EndpointSummary("Google OAuth callback")]
+        [EndpointDescription("Google kimlik doğrulaması tamamlandıktan sonra çağrılır. Kullanıcı oluşturulur veya mevcut hesaba bağlanır, JWT token Cookie olarak set edilir ve dashboard'a yönlendirilir.")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> GoogleCallback()
         {
-            // 1. Google'dan dönen verileri aracı "ExternalCookie" üzerinden okuyoruz
             var authenticateResult = await HttpContext.AuthenticateAsync("ExternalCookie");
 
             if (!authenticateResult.Succeeded)
                 return BadRequest(new { message = "Google kimlik doğrulaması başarısız oldu veya kullanıcı reddetti." });
 
-            // 2. Kullanıcı bilgilerini (Profile) çıkarıyoruz
             var claims = authenticateResult.Principal.Claims;
             var providerId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
             var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
 
-            // 3. İşimiz bittiği için o geçici çerezi (ExternalCookie) hemen siliyoruz
             await HttpContext.SignOutAsync("ExternalCookie");
 
             if (providerId == null || email == null)
                 return BadRequest(new { message = "Google'dan gerekli e-posta bilgisi alınamadı." });
 
-            // 4. AuthService'deki yazdığımız metodu çağırıp kullanıcıyı buluyoruz/yaratıyoruz
             var profile = new { Id = providerId, Email = email, DisplayName = name ?? "Google User" };
             var user = await _authService.ValidateOAutLoginAsync(profile, SocialiteType.Google);
 
-            // 5. Cihaz bilgilerini varsayılan olarak ayarlayıp sisteme Login yapıyoruz
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var userAgent = Request.Headers["User-Agent"].ToString();
             var dummyLoginDto = new RegisterLoginDto(user.Email, null, "", DeviceType.Web, "Web Browser", Guid.NewGuid().ToString());
 
             var (accessToken, refreshToken, loggedInUser) = await _authService.LoginAsync(user, ip, userAgent, dummyLoginDto);
 
-            // 6. Güvenli HttpOnly Cookie'lere bizim sistemimizin tokenlarını atıyoruz
             SetTokenCookies(accessToken, refreshToken);
 
-            // 7. SON ADIM: Frontend'in adresine yönlendiriyoruz!
-            // Çerezler tarayıcıya yerleştiği için, kullanıcı React/Angular anasayfasına düştüğünde giriş yapmış olacak.
             return Redirect("http://localhost:3000/dashboard");
         }
 
