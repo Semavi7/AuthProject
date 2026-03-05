@@ -83,7 +83,6 @@ Proje, **katmanlı mimari (Layered Architecture)** prensibiyle tasarlanmıştır
 ### Mimari Kararlar
 
 - **MediatR Event/Handler** pattern'i ile OTP gönderim mantığı servis katmanından ayrıştırılmıştır. `AuthService` sadece event yayımlar; kim/nasıl gönderdiği `SendEmailOtpHandler` ve `SendSmsOtpHandler` sınıflarına delege edilir.
-- **Repository pattern kullanılmamış**; EF Core `DbContext` doğrudan servis katmanında kullanılır (küçük ölçekli proje için pragmatik karar).
 - **HttpOnly Cookie** stratejisi; frontend'e token göndermek yerine tarayıcının cookie'sine yazılır, XSS saldırılarına karşı koruma sağlar.
 
 ---

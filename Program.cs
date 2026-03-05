@@ -2,6 +2,8 @@ using System.Text;
 using AuthProject.Db;
 using AuthProject.Entites;
 using AuthProject.Filters;
+using AuthProject.Middleware;
+using AuthProject.Repositories.AuthRepository;
 using AuthProject.Services.AuthService;
 using AuthProject.Services.EmailService;
 using AuthProject.Services.SmsSevice;
@@ -41,7 +43,7 @@ builder.Services.AddAuthentication(options =>
 .AddCookie("ExternalCookie")
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -71,7 +73,8 @@ builder.Services.AddAuthentication(options =>
     options.AccessDeniedPath = "/api/auth/access-denied";
 });
 
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 
@@ -115,6 +118,8 @@ builder.Services.AddOpenApi(options =>
 });
 
 var app = builder.Build();
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

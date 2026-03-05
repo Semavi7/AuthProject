@@ -1,30 +1,28 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using AuthProject.Db;
 using AuthProject.Dtos;
 using AuthProject.Entites;
 using AuthProject.Enums;
 using AuthProject.Events;
-using BCrypt.Net;
+using AuthProject.Repositories.AuthRepository;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AuthProject.Services.AuthService
 {
-    public class AuthService
+    public class AuthService : IAuthService
     {
         private readonly UserManager<User> _userManager;
-        private readonly ApplicationDbContext _dbContext;
+        private readonly IAuthRepository _authRepository; 
         private readonly IMediator _mediator;
         private readonly IConfiguration _config;
 
-        public AuthService(UserManager<User> userManager, ApplicationDbContext dbContext, IMediator mediator, IConfiguration config)
+        public AuthService(UserManager<User> userManager, IAuthRepository authRepository, IMediator mediator, IConfiguration config)
         {
             _userManager = userManager;
-            _dbContext = dbContext;
+            _authRepository = authRepository;
             _mediator = mediator;
             _config = config;
         }
@@ -35,7 +33,7 @@ namespace AuthProject.Services.AuthService
             if (!string.IsNullOrEmpty(dto.Email))
                 user = await _userManager.FindByEmailAsync(dto.Email);
             else if (!string.IsNullOrEmpty(dto.Phone))
-                user = await _dbContext.Users.FirstOrDefaultAsync(u => u.PhoneNumber == dto.Phone);
+                user = await _authRepository.GetUserByPhoneAsync(dto.Phone); 
 
             if (user == null || !await _userManager.HasPasswordAsync(user))
                 throw new UnauthorizedAccessException("Email veya şifre hatalı");
@@ -54,7 +52,7 @@ namespace AuthProject.Services.AuthService
         {
             User? existingUser = null;
             if (!string.IsNullOrEmpty(dto.Email)) existingUser = await _userManager.FindByEmailAsync(dto.Email);
-            else if (!string.IsNullOrEmpty(dto.Phone)) existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.PhoneNumber == dto.Phone);
+            else if (!string.IsNullOrEmpty(dto.Phone)) existingUser = await _authRepository.GetUserByPhoneAsync(dto.Phone); 
 
             if (existingUser != null) throw new UnauthorizedAccessException("Bu email veya telefon zaten kayıtlı");
 
@@ -91,8 +89,8 @@ namespace AuthProject.Services.AuthService
                 Status = VerifyStatus.Pedding
             };
 
-            _dbContext.Verifies.Add(verify);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddVerifyAsync(verify); 
+            await _authRepository.SaveChangesAsync(); 
 
             if (channel == VerifyChannel.Email && !string.IsNullOrEmpty(dto.Email))
                 await _mediator.Publish(new SendEmailOtpEvent(dto.Email, otpCode));
@@ -121,8 +119,9 @@ namespace AuthProject.Services.AuthService
             var refreshToken = GenerateRefreshToken(user.Id, session.Id);
 
             session.RefreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
-            _dbContext.UserSessions.Add(session);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddUserSessionAsync(session); 
+            await _authRepository.SaveChangesAsync(); 
+
             return (accessToken, refreshToken, user);
         }
 
@@ -132,7 +131,7 @@ namespace AuthProject.Services.AuthService
             string email = profile.Email;
             string displayName = profile.DisplayName;
 
-            var socialite = await _dbContext.Socialites.Include(s => s.User).FirstOrDefaultAsync(s => s.Type == provider && s.RefId == id);
+            var socialite = await _authRepository.GetSocialiteAsync(provider, id); 
 
             if (socialite != null) return socialite.User;
 
@@ -163,8 +162,8 @@ namespace AuthProject.Services.AuthService
                 Data = "{}"
             };
 
-            _dbContext.Socialites.Add(newSocialite);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddSocialiteAsync(newSocialite); 
+            await _authRepository.SaveChangesAsync(); 
 
             return user;
         }
@@ -173,7 +172,7 @@ namespace AuthProject.Services.AuthService
         {
             User? user = null;
             if (!string.IsNullOrEmpty(dto.Email)) user = await _userManager.FindByEmailAsync(dto.Email);
-            else if (!string.IsNullOrEmpty(dto.Phone)) user = await _dbContext.Users.FirstOrDefaultAsync(u => u.PhoneNumber == dto.Phone);
+            else if (!string.IsNullOrEmpty(dto.Phone)) user = await _authRepository.GetUserByPhoneAsync(dto.Phone); 
 
             if (user == null) throw new KeyNotFoundException("Kullanıcı bulunamadı.");
 
@@ -201,9 +200,9 @@ namespace AuthProject.Services.AuthService
                 ExpireAt = expireDate
             };
 
-            _dbContext.Verifies.Add(verify);
-            _dbContext.ForgetPasswords.Add(forgetPassword);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddVerifyAsync(verify); 
+            await _authRepository.AddForgetPasswordAsync(forgetPassword); 
+            await _authRepository.SaveChangesAsync(); 
 
             if (channel == VerifyChannel.Email && !string.IsNullOrEmpty(dto.Email)) await _mediator.Publish(new SendEmailOtpEvent(dto.Email, otpCode));
             else if (channel == VerifyChannel.Sms && !string.IsNullOrEmpty(dto.Phone)) await _mediator.Publish(new SendSmsOtpEvent(dto.Phone, otpCode));
@@ -213,27 +212,37 @@ namespace AuthProject.Services.AuthService
 
         public async Task<string> ResetPasswordAsync(ResetPasswordDto dto)
         {
-            var verify = await _dbContext.Verifies.FirstOrDefaultAsync(v => v.Id == dto.VerifyId && v.Status == VerifyStatus.Pedding);
+            var verify = await _authRepository.GetPendingVerifyByIdAsync(dto.VerifyId); 
+
             if (verify == null || verify.ExpiredAt < DateTime.UtcNow || verify.AttemptCount >= 5)
                 throw new ArgumentException("Geçersiz doğrulama işlemi.");
 
             if (verify.Code != dto.Code)
             {
                 verify.AttemptCount += 1;
-                await _dbContext.SaveChangesAsync();
+                await _authRepository.SaveChangesAsync(); 
                 throw new ArgumentException("Doğrulama kodu hatalı.");
             }
 
-            var forgetRecord = await _dbContext.ForgetPasswords.FirstOrDefaultAsync(f => f.VerifyId == dto.VerifyId && f.IsUsedAt == null);
+            var forgetRecord = await _authRepository.GetUnusedForgetPasswordAsync(dto.VerifyId); 
+
             if (forgetRecord == null) throw new ArgumentException("Kayıt bulunamadı.");
 
-            var user = await _userManager.FindByEmailAsync(forgetRecord.UserId.ToString());
+            var user = await _userManager.FindByIdAsync(forgetRecord.UserId.ToString());
             if (user == null) throw new KeyNotFoundException("Kullanıcı bulunamadı");
+
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var resetResult = await _userManager.ResetPasswordAsync(user, resetToken, dto.NewPassword);
+            if (!resetResult.Succeeded)
+            {
+                var errors = string.Join(", ", resetResult.Errors.Select(e => e.Description));
+                throw new Exception($"Şifre sıfırlanamadı: {errors}");
+            }
 
             verify.Status = VerifyStatus.Complated;
             forgetRecord.IsUsedAt = DateTime.UtcNow;
 
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.SaveChangesAsync(); 
 
             return "Şifreniz başarıyla sıfırlandı. Artık yeni şifrenizle giriş yapabilirsiniz.";
         }
@@ -244,26 +253,24 @@ namespace AuthProject.Services.AuthService
             if (!string.IsNullOrEmpty(dto.Email))
                 user = await _userManager.FindByEmailAsync(dto.Email);
             else if (!string.IsNullOrEmpty(dto.Phone))
-                user = await _dbContext.Users.FirstOrDefaultAsync(u => u.PhoneNumber == dto.Phone);
+                user = await _authRepository.GetUserByPhoneAsync(dto.Phone); 
+
             if (user == null) throw new KeyNotFoundException("Kullanıcı bulunamadı.");
             if (user.Status == UserStatus.Active) throw new UnauthorizedAccessException("Hesabınız zaten doğrulanmış.");
 
-            var verify = await _dbContext.Verifies
-                .Where(v => v.UserId == user.Id
-                 && v.Type == VerifyType.VerifyAccount && v.Status == VerifyStatus.Pedding)
-                .OrderByDescending(v => v.ExpiredAt)
-                .FirstOrDefaultAsync();
+            var verify = await _authRepository.GetLatestPendingVerifyAsync(user.Id, VerifyType.VerifyAccount); 
+
             if (verify!.AttemptCount >= 5)
             {
                 verify.Status = VerifyStatus.Complated;
-                await _dbContext.SaveChangesAsync();
+                await _authRepository.SaveChangesAsync(); 
                 throw new ArgumentException("Çok fazla hatalı deneme. Lütfen yeni bir kod isteyin.");
             }
 
             if (verify.Code != dto.Code)
             {
                 verify.AttemptCount += 1;
-                await _dbContext.SaveChangesAsync();
+                await _authRepository.SaveChangesAsync(); 
                 throw new ArgumentException("Doğrulama kodu hatalı. Lütfen tekrar deneyin.");
             }
 
@@ -274,7 +281,7 @@ namespace AuthProject.Services.AuthService
             else user.PhoneVerifyId = verify.Id;
 
             await _userManager.UpdateAsync(user);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.SaveChangesAsync(); 
 
             return "Hesabınız başarıyla doğrulandı. Artık giriş yapabilirsiniz.";
         }
@@ -285,14 +292,12 @@ namespace AuthProject.Services.AuthService
             if (!string.IsNullOrEmpty(dto.Email))
                 user = await _userManager.FindByEmailAsync(dto.Email);
             else if (!string.IsNullOrEmpty(dto.Phone))
-                user = await _dbContext.Users.FirstOrDefaultAsync(u => u.PhoneNumber == dto.Phone);
+                user = await _authRepository.GetUserByPhoneAsync(dto.Phone); 
 
             if (user == null) throw new KeyNotFoundException("Kullanıcı bulunamadı.");
             if (user.Status == UserStatus.Active) throw new ArgumentException("Hesap zaten doğrulanmış.");
 
-            var pendingVerifies = await _dbContext.Verifies
-                .Where(v => v.UserId == user.Id && v.Type == VerifyType.VerifyAccount && v.Status == VerifyStatus.Pedding)
-                .ToListAsync();
+            var pendingVerifies = await _authRepository.GetPendingVerifiesAsync(user.Id, VerifyType.VerifyAccount); 
 
             foreach (var pv in pendingVerifies) pv.Status = VerifyStatus.Complated;
 
@@ -311,34 +316,58 @@ namespace AuthProject.Services.AuthService
                 UserAgent = userAgent ?? "unknown"
             };
 
-            _dbContext.Verifies.Add(verify);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddVerifyAsync(verify); 
+            await _authRepository.SaveChangesAsync(); 
 
             if (channel == VerifyChannel.Email && !string.IsNullOrEmpty(dto.Email))
                 await _mediator.Publish(new SendEmailOtpEvent(dto.Email, otpCode));
             else if (channel == VerifyChannel.Sms && !string.IsNullOrEmpty(dto.Phone))
                 await _mediator.Publish(new SendSmsOtpEvent(dto.Phone, otpCode));
+
             return "Yeni doğrulama kodu gönderildi.";
         }
 
         public async Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string token)
         {
             var handler = new JwtSecurityTokenHandler();
-            var jwtToken = handler.ReadJwtToken(token);
-            var sessionIdStr = jwtToken.Claims.First(claim => claim.Type == "sessionId").Value;
-            var userIdStr = jwtToken.Claims.First(claim => claim.Type == JwtRegisteredClaimNames.Sub).Value;
+            handler.InboundClaimTypeMap.Clear();
+
+            var validationParams = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = false,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _config["Jwt:Issuer"],
+                ValidAudience = _config["Jwt:Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(
+                    System.Text.Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!))
+            };
+
+            ClaimsPrincipal principal;
+            try
+            {
+                principal = handler.ValidateToken(token, validationParams, out _);
+            }
+            catch
+            {
+                throw new UnauthorizedAccessException("Geçersiz refresh token.");
+            }
+
+            var sessionIdStr = principal.Claims.First(c => c.Type == "sessionId").Value;
+            var userIdStr = principal.Claims.First(c => c.Type == JwtRegisteredClaimNames.Sub).Value;
 
             var sessionId = Guid.Parse(sessionIdStr);
             var userId = Guid.Parse(userIdStr);
 
-            var session = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId);
+            var session = await _authRepository.GetSessionAsync(sessionId, userId); 
 
             if (session == null) throw new UnauthorizedAccessException("Oturum bulunamadı.");
             if (session.RevokeAt != null) throw new UnauthorizedAccessException("Oturum iptal edilmiş");
             if (session.ExpireAt < DateTime.UtcNow)
             {
-                _dbContext.UserSessions.Remove(session);
-                await _dbContext.SaveChangesAsync();
+                _authRepository.RemoveSession(session); 
+                await _authRepository.SaveChangesAsync(); 
                 throw new UnauthorizedAccessException("Oturum süresi dolmuş.");
             }
 
@@ -354,38 +383,36 @@ namespace AuthProject.Services.AuthService
             session.RefreshTokenHash = BCrypt.Net.BCrypt.HashPassword(newRefreshToken);
             session.LastActiveAt = DateTime.UtcNow;
 
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.SaveChangesAsync(); 
 
             return (newAccessToken, newRefreshToken);
         }
 
         public async Task<string> LogoutAsync(Guid sessionId)
         {
-            var session = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.Id == sessionId);
+            var session = await _authRepository.GetSessionByIdAsync(sessionId); 
             if (session == null) throw new KeyNotFoundException("Oturum bulunamadı.");
 
             session.RevokeAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.SaveChangesAsync(); 
 
             return "Başarıyla çıkış yapıldı.";
         }
 
         public async Task<List<UserSession>> GetActiveSessionsAsync(Guid userId)
         {
-            return await _dbContext.UserSessions
-                .Where(s => s.UserId == userId && s.RevokeAt == null && s.ExpireAt > DateTime.UtcNow)
-                .OrderByDescending(s => s.LastActiveAt)
-                .Select(s => new UserSession
-                {
-                    Id = s.UserId,
-                    DeviceId = s.DeviceId,
-                    DeviceName = s.DeviceName,
-                    LastActiveAt = s.LastActiveAt,
-                    ExpireAt = s.ExpireAt,
-                    IpAdress = s.IpAdress,
-                    CreatedAt = s.CreatedAt
-                })
-                .ToListAsync();
+            var sessions = await _authRepository.GetActiveSessionsAsync(userId); 
+
+            return sessions.Select(s => new UserSession
+            {
+                Id = s.Id,
+                DeviceId = s.DeviceId,
+                DeviceName = s.DeviceName,
+                LastActiveAt = s.LastActiveAt,
+                ExpireAt = s.ExpireAt,
+                IpAdress = s.IpAdress,
+                CreatedAt = s.CreatedAt
+            }).ToList();
         }
 
         private string GenerateAccessToken(User user, Guid sessionId)

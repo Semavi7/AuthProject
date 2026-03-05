@@ -5,7 +5,6 @@ using AuthProject.Services.AuthService;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthProject.Controllers
@@ -14,9 +13,9 @@ namespace AuthProject.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly AuthService _authService;
+        private readonly IAuthService _authService;
 
-        public AuthController(AuthService authService)
+        public AuthController(IAuthService authService)
         {
             _authService = authService;
         }
@@ -29,7 +28,7 @@ namespace AuthProject.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Register([FromBody] RegisterLoginDto dto)
         {
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unkvown";
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var userAgent = Request.Headers["User-Agent"].ToString();
 
             var (message, user) = await _authService.RegisterAsync(dto, ip, userAgent);
@@ -47,7 +46,7 @@ namespace AuthProject.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Login([FromBody] RegisterLoginDto dto)
         {
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unkvown";
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var userAgent = Request.Headers["User-Agent"].ToString();
 
             var user = await _authService.ValidateUserAsync(dto);
