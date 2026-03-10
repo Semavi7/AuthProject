@@ -1,29 +1,32 @@
 ﻿
+using AuthProject.Settings;
+using Microsoft.Extensions.Options;
+
 namespace AuthProject.Services.EmailService
 {
     public class SmtpEmailService : IEmailService
     {
-        private readonly IConfiguration _config;
+        private readonly SmtpSettings _smtpSettings;
 
-        public SmtpEmailService(IConfiguration config)
+        public SmtpEmailService(IOptions<SmtpSettings> options)
         {
-            _config = config;
+            _smtpSettings = options.Value;
         }
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
             try
             {
-                var smtpClient = new System.Net.Mail.SmtpClient(_config["Smtp:Host"])
+                var smtpClient = new System.Net.Mail.SmtpClient(_smtpSettings.Host)
                 {
-                    Port = int.Parse(_config["Smtp:Port"]),
-                    Credentials = new System.Net.NetworkCredential(_config["Smtp:Username"], _config["Smtp:Password"]),
+                    Port = _smtpSettings.Port,
+                    Credentials = new System.Net.NetworkCredential(_smtpSettings.Username, _smtpSettings.Password),
                     EnableSsl = true,
                 };
 
                 var mailMessage = new System.Net.Mail.MailMessage
                 {
-                    From = new System.Net.Mail.MailAddress(_config["Smtp:From"]),
+                    From = new System.Net.Mail.MailAddress(_smtpSettings.From),
                     Subject = subject,
                     Body = body,
                     IsBodyHtml = true,

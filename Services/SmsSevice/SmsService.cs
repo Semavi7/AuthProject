@@ -1,4 +1,6 @@
 ﻿
+using AuthProject.Settings;
+using Microsoft.Extensions.Options;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
@@ -7,20 +9,20 @@ namespace AuthProject.Services.SmsSevice
 {
     public class SmsService : ISmsService
     {
-        private readonly IConfiguration _config;
+        private readonly SmsSettings _smsSettings;
 
-        public SmsService(IConfiguration config)
+        public SmsService(IOptions<SmsSettings> options)
         {
-            _config = config;
+            _smsSettings = options.Value;
         }
 
         public async Task SendSmsAsync(string phoneNumber, string message)
         {
             try
             {
-                var accountSid = _config["SmsProvider:TiwilioAccoundSid"];
-                var authToken = _config["SmsProvider:TiwilioAuthToken"];
-                var twilioNumber = _config["SmsProvider:TwilioPhoneNumber"];
+                var accountSid = _smsSettings.TiwilioAccoundSid;
+                var authToken = _smsSettings.TiwilioAuthToken;
+                var twilioNumber = _smsSettings.TwilioPhoneNumber;
                 TwilioClient.Init(accountSid, authToken);
 
                 MessageResource.Create(

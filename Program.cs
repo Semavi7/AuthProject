@@ -7,6 +7,7 @@ using AuthProject.Repositories.AuthRepository;
 using AuthProject.Services.AuthService;
 using AuthProject.Services.EmailService;
 using AuthProject.Services.SmsSevice;
+using AuthProject.Settings;
 using AuthProject.Validators;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -17,6 +18,10 @@ using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
+builder.Services.Configure<SmsSettings>(builder.Configuration.GetSection("SmsProvider"));
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))

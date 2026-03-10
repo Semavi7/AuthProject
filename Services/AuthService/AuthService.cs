@@ -6,8 +6,10 @@ using AuthProject.Entites;
 using AuthProject.Enums;
 using AuthProject.Events;
 using AuthProject.Repositories.AuthRepository;
+using AuthProject.Settings;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AuthProject.Services.AuthService
@@ -17,14 +19,14 @@ namespace AuthProject.Services.AuthService
         private readonly UserManager<User> _userManager;
         private readonly IAuthRepository _authRepository; 
         private readonly IMediator _mediator;
-        private readonly IConfiguration _config;
+        private readonly JwtSettings _jwtSettings;
 
-        public AuthService(UserManager<User> userManager, IAuthRepository authRepository, IMediator mediator, IConfiguration config)
+        public AuthService(UserManager<User> userManager, IAuthRepository authRepository, IMediator mediator, IOptions<JwtSettings> jwtOptions)
         {
             _userManager = userManager;
             _authRepository = authRepository;
             _mediator = mediator;
-            _config = config;
+            _jwtSettings = jwtOptions.Value;
         }
 
         public async Task<User> ValidateUserAsync(RegisterLoginDto dto)
@@ -338,10 +340,10 @@ namespace AuthProject.Services.AuthService
                 ValidateAudience = true,
                 ValidateLifetime = false,
                 ValidateIssuerSigningKey = true,
-                ValidIssuer = _config["Jwt:Issuer"],
-                ValidAudience = _config["Jwt:Audience"],
+                ValidIssuer = _jwtSettings.Issuer,
+                ValidAudience = _jwtSettings.Audience,
                 IssuerSigningKey = new SymmetricSecurityKey(
-                    System.Text.Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!))
+                    System.Text.Encoding.UTF8.GetBytes(_jwtSettings.Secret!))
             };
 
             ClaimsPrincipal principal;
@@ -424,11 +426,11 @@ namespace AuthProject.Services.AuthService
                 new Claim("phone", user.PhoneNumber ?? ""),
                 new Claim("sessionId", sessionId.ToString())
             };
-            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
+            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_jwtSettings.Secret!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(
-                issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
+                issuer: _jwtSettings.Issuer,
+                audience: _jwtSettings.Audience,
                 claims: claims,
                 expires: DateTime.UtcNow.AddMinutes(15),
                 signingCredentials: creds
@@ -443,10 +445,10 @@ namespace AuthProject.Services.AuthService
                 new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
                 new Claim("sessionId", sessionId.ToString())
             };
-            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
+            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_jwtSettings.Secret!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-            var token = new JwtSecurityToken(issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
+            var token = new JwtSecurityToken(issuer: _jwtSettings.Issuer,
+                audience: _jwtSettings.Audience,
                 claims: claims,
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: creds);
