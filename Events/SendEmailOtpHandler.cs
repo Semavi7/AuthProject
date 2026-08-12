@@ -12,10 +12,14 @@ namespace AuthProject.Events
             _emailService = emailService;
         }
 
-        public async Task Handle(SendEmailOtpEvent notification, CancellationToken cancellationToken)
+        public async Task Handle(
+            SendEmailOtpEvent notification,
+            CancellationToken cancellationToken
+        )
         {
             string subject = "Güvenlik Doğrulama Kodunuz";
-            string body = $"<h3>Merhaba,</h3><p>Hesabınızı doğrulamak veya şifrenizi sıfırlamak için onay kodunuz: <b>{notification.Code}</b></p><p>Bu kodu kimseyle paylaşmayın.</p>";
+            string body =
+                $"<h3>Merhaba,</h3><p>Hesabınızı doğrulamak veya şifrenizi sıfırlamak için onay kodunuz: <b>{notification.Code}</b></p><p>Bu kodu kimseyle paylaşmayın.</p>";
 
             await _emailService.SendEmailAsync(notification.Email, subject, body);
         }
